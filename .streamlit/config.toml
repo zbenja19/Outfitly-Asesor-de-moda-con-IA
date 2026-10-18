@@ -1,0 +1,16 @@
+# El file watcher de Streamlit recorre el __path__ de cada modulo cargado.
+# Con torch (dependencia de sentence-transformers) eso revienta con
+# "Tried to instantiate class '__path__._path'" / "torch.classes raised",
+# y el error aparece justo cuando se carga el modelo de embeddings:
+# es decir, al ingestar o al mandar el primer mensaje.
+# Desactivarlo elimina ese crash. Costo: hay que reiniciar la app a mano
+# despues de editar el codigo (no hay hot-reload).
+[server]
+fileWatcherType = "none"
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[runner]
+fastReruns = true

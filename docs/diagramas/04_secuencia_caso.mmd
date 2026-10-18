@@ -1,0 +1,39 @@
+sequenceDiagram
+  autonumber
+  actor C as Cliente
+  participant G as Grafo (LangGraph)
+  participant L as LLM (Groq)
+  participant T as Herramientas
+  participant DB as MongoDB Atlas
+
+  C->>G: "Outfit de oficina, máximo $100.000"
+  G->>DB: recall: memoria del cliente (vector search)
+  DB-->>G: "usa talla M, calzado 42"
+  G->>L: plan (salida estructurada)
+  L-->>G: Plan{outfit, oficina, $100.000, tops p1, bottoms p1, shoes p2}
+  loop ejecución del plan
+    G->>L: agent (con plan + memoria)
+    L-->>G: llama buscar_productos ×3
+    G->>T: buscar_productos
+    T->>DB: $vectorSearch + filtros duros
+    DB-->>T: productos con stock
+  end
+  L-->>G: evaluar_outfit(TOP-001 M, BOT-003 42, SHO-002 42)
+  T-->>G: ok=false · total $104.970 supera el presupuesto
+  L-->>G: respuesta final (ignora el problema)
+  G->>G: verify → RECHAZADA (presupuesto)
+  G->>L: REPLAN con observaciones del verificador
+  L-->>G: Plan ajustado
+  G->>T: buscar_productos(shoes, precio_max=40.000)
+  T-->>G: SHO-006 Mocasines $39.990
+  G->>T: evaluar_outfit(... SHO-006 ...)
+  T-->>G: ok=true · total $94.970
+  G->>G: verify → OK
+  G-->>C: Outfit con total $94.970
+  C->>G: "Perfecto, resérvalo"
+  G->>L: plan → intención = reserva
+  G->>T: reservar_producto ×3
+  T->>DB: update_one atómico ($gte + $inc)
+  DB-->>T: stock descontado
+  G->>DB: remember: episodio "reservó outfit de oficina…"
+  G-->>C: Confirmación de reserva

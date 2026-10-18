@@ -1,0 +1,4 @@
+# Dependencias SOLO para correr las pruebas automaticas (no hacen falta para usar la app).
+-r requirements.txt
+pytest==9.1.1
+mongomock==4.3.0

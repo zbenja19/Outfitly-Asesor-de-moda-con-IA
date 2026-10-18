@@ -1,0 +1,349 @@
+================================================================================
+ OUTFITLY - Asesor de moda con IA (RAG)
+ INSTRUCCIONES DE EJECUCION - Windows y macOS
+================================================================================
+
+ Ultima verificacion: 8 de septiembre de 2026
+ Probado en: Windows + Python 3.14.6 (funciono sin problemas)
+
+
+--------------------------------------------------------------------------------
+ 0. QUE ES ESTO Y COMO FUNCIONA
+--------------------------------------------------------------------------------
+
+ Chatbot que recomienda outfits usando SOLO productos que existen en el catalogo
+ de la tienda. Piezas:
+
+   data/catalog.json  ->  57 productos (la "verdad" del inventario)
+   MongoDB Atlas      ->  guarda cada producto + su vector de embedding
+   Atlas Vector Search->  busca los productos mas parecidos a lo que pide el cliente
+   Groq               ->  el modelo de lenguaje que redacta la respuesta
+   Streamlit          ->  la interfaz web
+
+ Los embeddings se calculan LOCALMENTE con sentence-transformers: no cuestan
+ dinero ni requieren API key, pero la primera ejecucion descarga ~90MB.
+
+
+--------------------------------------------------------------------------------
+ 1. REQUISITOS PREVIOS (ambos sistemas)
+--------------------------------------------------------------------------------
+
+ - Python 3.10 o superior. Verificado en 3.14.6.
+   El codigo usa sintaxis de 3.10+ (union types con |), no funciona en 3.9.
+
+ - Conexion a internet. Se usa para:
+     * descargar dependencias (~2GB, la mayoria es torch)
+     * descargar el modelo de embeddings la primera vez (~90MB, HuggingFace)
+     * hablar con MongoDB Atlas y con la API de Groq
+
+ - Un archivo .env con credenciales (ver seccion 3).
+
+ - Git instalado SOLO si vas a usar el boton "Ingestar desde GitHub".
+   Para el uso normal no hace falta.
+
+
+--------------------------------------------------------------------------------
+ 2. INSTALACION
+--------------------------------------------------------------------------------
+
+ ============================ W I N D O W S ====================================
+
+  Primero:
+  Instala todos los requerimientos que se necesitan para ejecutar el proyecto.
+  Lo instalas en la terminal de vs code o PowerShell como administrador, con el siguiente comando:
+
+  pip install -r requirements.txt
+
+  Luego:
+  Abre una terminal en vs code o un PowerShell como administrador
+  Posicionate en la ruta donde descargaste el archivo .ZIP
+  cd Tu ruta del archivo
+
+  Luego:
+  Dentro de la misma PowerShell ejecuta en la misma PowerShell o terminal estos comandos para inicia el entorno virtual.
+
+  python -m venv venv 
+     .\venv\Scripts\Activate.ps1
+
+  Por ultimo:
+
+  Ejecutas el ultimo comando para que se inicie de forma local el chat bot con streamlit.
+
+  streamlit run app.py
+
+  ======================================
+  HAZ ESTO SI TIENES PROBLEMAS 
+  ======================================
+  Si PowerShell bloquea el script con "la ejecucion de scripts esta
+  deshabilitada en este sistema", ejecuta primero:
+
+     Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+     .\venv\Scripts\Activate.ps1
+  ======================================
+ ============================== m a c O S ======================================
+
+   Abre Terminal y situate en la carpeta del proyecto:
+
+     cd /ruta/donde/descomprimiste/outfitly
+
+     python3 -m venv venv
+     source venv/bin/activate
+
+     pip install -r requirements.txt
+
+   NOTA IMPORTANTE PARA MAC:
+   Si al llegar al paso 5 (modelo de embeddings) aparece un error tipo
+   "SSL: CERTIFICATE_VERIFY_FAILED" al descargar desde HuggingFace, es el
+   problema clasico de certificados de Python en macOS. Solucion:
+
+     /Applications/Python\ 3.x/Install\ Certificates.command
+
+   (reemplaza 3.x por tu version). Si instalaste Python con Homebrew en vez de
+   python.org, esto no suele pasar.
+
+   En Apple Silicon (M1/M2/M3/M4) torch instala sin problema y usa la CPU o MPS.
+
+ ---- En ambos sistemas debe aparecer (venv) al inicio del prompt ----
+
+
+--------------------------------------------------------------------------------
+ 3. CREDENCIALES (.env)
+--------------------------------------------------------------------------------
+
+ SI EL ZIP YA TRAE UN ARCHIVO .env  ->  salta esta seccion.
+
+ SI NO LO TRAE, crea uno copiando la plantilla:
+
+   Windows:  copy .env.example .env
+   macOS:    cp .env.example .env
+
+ Y edita el .env. Las dos variables obligatorias:
+
+   MONGODB_CONNECTION_STRING=mongodb+srv://USUARIO:PASSWORD@CLUSTER.mongodb.net/?retryWrites=true&w=majority
+   GROQ_API_KEY=gsk_...
+
+   - La connection string sale de Atlas: Connect > Drivers.
+   - Si el password tiene @ : / o # hay que escaparlo (urllib.parse.quote_plus).
+   - La key de Groq es gratis en https://console.groq.com/keys
+
+ Variable opcional pero recomendada:
+
+   GROQ_MODEL=qwen/qwen3.8-27b
+
+   OJO: Groq retira modelos con frecuencia. Toda la familia Llama dejo de estar
+   disponible en septiembre de 2026. Si el modelo del .env ya no existe, la app
+   NO se rompe: avisa y elige automaticamente el mejor disponible. Para ver que
+   modelos ofrece tu key:  python modelos_groq.py
+
+ IMPORTANTE - ACCESO DESDE UN PC NUEVO:
+ MongoDB Atlas filtra por IP. Si el segundo computador esta en otra red, hay que
+ agregar su IP en Atlas > Network Access, o la conexion fallara con
+ ServerSelectionTimeoutError.
+
+
+--------------------------------------------------------------------------------
+ 4. PRIMERA PUESTA EN MARCHA
+--------------------------------------------------------------------------------
+
+ Los comandos son IDENTICOS en Windows y macOS, salvo que en macOS se escribe
+ "python3" en vez de "python" si el venv no esta activado. Con el venv activado
+ "python" funciona en ambos.
+
+ PASO 1 - Verificar que todo este en su lugar
+
+     python verificar_entorno.py
+
+   Prueba 7 capas por separado: dependencias, .env, MongoDB, indice vectorial,
+   modelo de embeddings, Groq, y una consulta RAG completa.
+   Es el primer sitio donde mirar cuando algo falle.
+
+ PASO 2 - Ingestar el catalogo a MongoDB
+
+     python ingestar.py
+
+   Debe reportar 57 insertados. Es idempotente: si vuelves a correrlo dice
+   "todos los productos ya estaban ingestados" y no duplica nada.
+   Para reemplazar datos ya cargados (stock o precios nuevos):
+
+     python ingestar.py --refresh
+
+ PASO 3 - Crear el indice de Vector Search en Atlas
+
+     python create_vector_index.py
+
+   Debe ir DESPUES de la ingesta: el indice se crea sobre la coleccion ya
+   poblada. El script se niega a indexar una coleccion vacia, y espera solo
+   hasta que el indice quede READY (1-2 minutos).
+
+ PASO 4 - Verificar de nuevo
+
+     python verificar_entorno.py
+
+   Ahora debe llegar al paso 7 y mostrar una respuesta real del asistente.
+
+ PASO 5 - Levantar la app
+
+     streamlit run app.py
+
+   Abre http://localhost:8501
+
+
+ >>> LOS PASOS 2 Y 3 SOLO SE HACEN UNA VEZ, NO UNA VEZ POR COMPUTADOR. <<<
+
+ Los datos y el indice viven en MongoDB Atlas, que es compartido. Si un PC ya
+ ingesto y creo el indice, el segundo PC solo necesita: instalar dependencias,
+ tener el .env, y correr streamlit run app.py.
+
+
+--------------------------------------------------------------------------------
+ 5. USO DIARIO (despues de la primera vez)
+--------------------------------------------------------------------------------
+
+   Windows:  cd C:\ruta\a\outfitly
+             .\venv\Scripts\Activate.ps1
+             streamlit run app.py
+
+   macOS:    cd /ruta/a/outfitly
+             source venv/bin/activate
+             streamlit run app.py
+
+
+--------------------------------------------------------------------------------
+ 6. SCRIPTS DISPONIBLES
+--------------------------------------------------------------------------------
+
+   verificar_entorno.py      Diagnostica las 7 capas por separado. EMPIEZA AQUI
+                             cuando algo falle.
+
+   ingestar.py               Ingesta el catalogo por linea de comandos.
+                             --refresh para reemplazar lo ya cargado.
+
+   create_vector_index.py    Crea el indice de Atlas Vector Search y espera a
+                             que quede activo.
+
+   modelos_groq.py           Lista los modelos que tu key de Groq puede usar hoy.
+
+   comparar_embeddings.py    Compara la calidad de recuperacion entre el modelo
+                             de embeddings actual y uno multilingue.
+                             (ver seccion 8)
+
+   eval/evaluate.py          Evaluacion RAGAS. Correr APARTE, no desde la app:
+                             carga varios GB de RAM.
+
+
+--------------------------------------------------------------------------------
+ 7. PROBLEMAS FRECUENTES
+--------------------------------------------------------------------------------
+
+ "Falta MONGODB_CONNECTION_STRING" / "Falta GROQ_API_KEY"
+   No existe el .env, o esta incompleto. Ver seccion 3.
+
+ ServerSelectionTimeoutError / no se puede conectar a Mongo
+   La IP de este computador no esta autorizada en Atlas > Network Access.
+   O el cluster esta pausado. O el password tiene caracteres sin escapar.
+
+ "The model X does not exist or you do not have access to it"
+   Groq retiro ese modelo. Corre: python modelos_groq.py
+   y pon uno vigente en GROQ_MODEL. La app tambien se autocorrige sola.
+
+ El chat responde "no tengo informacion" a todo
+   No se ingesto el catalogo, o el indice no esta activo todavia.
+   Corre: python verificar_entorno.py
+
+ Error de rate limit / 429 de Groq
+   El free tier limita tokens por minuto. En la barra lateral, baja
+   "Mensajes de historial enviados al modelo" y "top_k". O espera un minuto.
+   O cambia a un modelo mas chico.
+
+ "Port 8501 is already in use"
+   Quedo un proceso de Streamlit huerfano de un intento anterior.
+
+   Windows:  netstat -ano | findstr :8501
+             taskkill /PID <el_pid_que_aparezca> /F
+
+   macOS:    lsof -ti:8501 | xargs kill -9
+
+   O simplemente:  streamlit run app.py --server.port 8502
+
+ SSL: CERTIFICATE_VERIFY_FAILED al descargar el modelo de embeddings
+   Tipico de macOS con Python de python.org. Ver la nota de la seccion 2.
+
+ Editaste el codigo y la app no muestra los cambios
+   El file watcher esta DESACTIVADO a proposito en .streamlit/config.toml,
+   porque entra en conflicto con torch y tumbaba la app.
+   Hay que reiniciar Streamlit a mano (Ctrl+C y volver a lanzarlo).
+
+
+--------------------------------------------------------------------------------
+ 8. LIMITACION CONOCIDA, SIN RESOLVER
+--------------------------------------------------------------------------------
+
+ La busqueda semantica rinde mal en espanol.
+
+ Comprobado el 8-sep-2026: ante la consulta "necesito un outfit de oficina para
+ hombre", el buscador devolvio tres prendas de MUJER, pese a que el catalogo
+ tiene 8 candidatos correctos (camisa Oxford, pantalon de tela sastre, zapatos
+ de cuero, cinturon, cardigan unisex).
+
+ El modelo respondio bien: aviso que no tenia prendas de hombre en el contexto
+ en vez de inventar. Pero la recuperacion fallo.
+
+ HIPOTESIS (no confirmada): el modelo de embeddings por defecto,
+ all-MiniLM-L6-v2, esta entrenado SOLO EN INGLES, y tanto el catalogo como las
+ consultas estan en espanol.
+
+ PARA COMPROBARLO:
+
+     python comparar_embeddings.py
+
+ Compara la precision de all-MiniLM-L6-v2 contra
+ paraphrase-multilingual-MiniLM-L12-v2 sobre 5 consultas en espanol.
+ Descarga ~470MB la primera vez.
+
+ SI EL MULTILINGUE GANA, el arreglo es barato porque ambos producen vectores de
+ 384 dimensiones, o sea que NO hay que tocar el indice de Atlas:
+
+   1. En el .env:  EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
+   2. python ingestar.py --refresh
+   3. python verificar_entorno.py
+
+ SI NO GANA, la hipotesis era incorrecta y el problema esta en otra parte
+ (probablemente en que el texto que se embebe mezcla precio, stock y tallas con
+ la descripcion, y ese ruido diluye la senal semantica). Ese arreglo es bastante
+ mas caro y habria que rediseñar _product_to_text en src/ingesta/ingest.py.
+
+ MIENTRAS TANTO: los filtros de la barra lateral (Genero, Categoria) SI
+ funcionan, porque son un pre-filtro duro en MongoDB, no busqueda semantica.
+ Usarlos evita el problema en la practica.
+
+
+--------------------------------------------------------------------------------
+ 9. OTRA LIMITACION IMPORTANTE
+--------------------------------------------------------------------------------
+
+ La promesa "solo recomienda productos que existen" descansa UNICAMENTE en las
+ instrucciones del prompt (prompts/prompt.py). No hay ninguna verificacion en
+ codigo de que los SKU que menciona la respuesta esten realmente en el contexto
+ recuperado.
+
+ En las pruebas el modelo se comporto bien, pero eso es conducta observada, no
+ una garantia del sistema. Si esto va a produccion, esa validacion es lo
+ primero que hay que construir.
+
+
+--------------------------------------------------------------------------------
+ 10. DOCUMENTACION ADICIONAL
+--------------------------------------------------------------------------------
+
+   CAMBIOS.md   Registro completo de la depuracion: las 8 causas raiz que se
+                encontraron, que se cambio en cada archivo y por que, que se
+                verifico y que quedo sin verificar.
+
+   README.md    Documentacion original del proyecto (arquitectura, decisiones
+                de diseño). Sus instrucciones de arranque son de Linux/macOS y
+                omiten el paso de ingesta: usa ESTE archivo en su lugar.
+
+   backup_original/   Copia de los archivos tal como estaban antes de la
+                      depuracion, por si hay que comparar o revertir.
+
+================================================================================

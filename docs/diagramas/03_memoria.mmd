@@ -1,0 +1,29 @@
+flowchart LR
+  subgraph CP["MEMORIA DE CORTO PLAZO  (continuidad dentro de una conversación)"]
+    direction TB
+    H1["ConversationStore<br/>colección agent_conversations<br/>mensajes completos por thread_id<br/>(sobrevive a reinicios)"]
+    H2["window_messages()<br/>al LLM solo van los últimos N mensajes<br/>+ el turno actual completo<br/>(nunca corta una tool call)"]
+    H1 --> H2
+  end
+
+  subgraph LP["MEMORIA DE LARGO PLAZO  (continuidad entre conversaciones)"]
+    direction TB
+    L1["MemoryStore<br/>colección agent_memory<br/>texto + embedding + user_id + tipo"]
+    L2["Índice memory_index<br/>Atlas Vector Search · coseno<br/>filtro duro por user_id"]
+    L3["recall: top-k por similitud<br/>con el último mensaje<br/>(umbral de relevancia 0,55)"]
+    L4["remember: guarda preferencias<br/>(plan.new_preferences) y episodios<br/>deduplica con umbral 0,97"]
+    L1 --- L2
+    L2 --> L3
+    L4 --> L1
+  end
+
+  U(["Cliente"]) --> CP
+  U --> LP
+  CP --> PR["Prompt del agente"]
+  LP --> PR
+  PR --> LLM["LLM (Groq)"]
+
+  classDef cp fill:#E8F0FE,stroke:#3367D6,color:#1a1a1a
+  classDef lp fill:#E7F6EC,stroke:#2E8B57,color:#1a1a1a
+  class H1,H2 cp
+  class L1,L2,L3,L4 lp

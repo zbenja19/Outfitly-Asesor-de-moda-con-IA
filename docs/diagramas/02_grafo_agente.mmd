@@ -1,0 +1,17 @@
+flowchart LR
+  S(["Mensaje"]) --> R["<b>recall</b><br/>memoria largo plazo<br/>(vector search)"]
+  R --> P["<b>plan</b><br/>Plan estructurado<br/>+ prioridades"]
+  P --> A{"<b>agent</b><br/>LLM + herramientas"}
+  A -- "tool calls" --> T["<b>tools</b><br/>consulta · razonamiento<br/>· escritura"]
+  T --> A
+  A -- "respuesta" --> V{"<b>verify</b><br/>sin LLM:<br/>SKUs reales<br/>outfit evaluado<br/>plan · presupuesto<br/>reservas"}
+  V -- "OK" --> M["<b>remember</b><br/>preferencias<br/>y episodios"]
+  V -. "rechazada<br/>(máx. 2 veces)" .-> P
+  M --> E(["Respuesta"])
+
+  classDef node fill:#FFF4E0,stroke:#E08A00,color:#1a1a1a
+  classDef check fill:#FDECEA,stroke:#C0392B,color:#1a1a1a
+  classDef io fill:#E8F0FE,stroke:#3367D6,color:#1a1a1a
+  class R,P,T,M node
+  class A,V check
+  class S,E io

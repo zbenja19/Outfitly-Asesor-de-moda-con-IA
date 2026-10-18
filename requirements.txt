@@ -1,0 +1,38 @@
+#App
+streamlit==1.63.0
+pymongo==4.17.0
+python-dotenv==1.2.3
+gitpython==3.1.61
+
+# LLM: Groq (chat/generación). API 100% compatible con OpenAI SDK.
+groq==1.7.0
+
+# Embeddings 100% locales y gratuitos (no requieren API key).
+# torch se instala como dependencia de sentence-transformers.
+sentence-transformers==6.0.1
+
+# openai queda SOLO como cliente HTTP compatible: eval/evaluate.py lo usa
+# apuntado al endpoint OpenAI-compatible de Groq (https://api.groq.com/openai/v1),
+# nunca se llama a la API real de OpenAI. Debe ser <2.0 porque lo exige
+# 'instructor' (dependencia de ragas para llm_factory).
+openai==1.109.1
+
+# Agente (EP2): orquestacion con grafos de estado. 0.6.x es la ultima linea
+# compatible con langchain-core 0.3.x (langgraph 1.x exige langchain-core 1.x).
+# El LLM se usa via langchain-openai apuntando al endpoint OpenAI-compatible de
+# Groq (no se usa langchain-groq porque exige groq<1 y aqui se fija groq==1.7.0).
+langgraph==0.6.11
+
+# Observabilidad
+langsmith==0.12.1
+
+# Evaluacion RAG.
+# ragas importa langchain_community.chat_models.vertexai, modulo que fue
+# eliminado en langchain-community 0.4 -> toda la pila langchain va en 0.3.x.
+ragas==0.4.3
+datasets==5.0.1
+langchain==0.3.30
+langchain-core==0.3.86
+langchain-community==0.3.31
+langchain-openai==0.3.35
+langchain-mongodb==0.7.2

@@ -1,0 +1,42 @@
+[
+  {
+    "question": "¿Tienen alguna camisa para ir a la oficina?",
+    "ground_truth": "Sí, la tienda tiene la Camisa Oxford Celeste (SKU TOP-001), de algodón 100%, ideal para looks de oficina, con stock en tallas S, M, L y XL, a $24.990 CLP."
+  },
+  {
+    "question": "Necesito un outfit para una fiesta de noche, ¿qué me recomiendas?",
+    "ground_truth": "Se puede armar un outfit de fiesta con el Vestido de Cóctel Negro (DRS-002) o el Vestido Largo de Fiesta Dorado (DRS-004), combinado con las Sandalias de Taco Doradas (SHO-003) y el Collar Dorado Minimalista (ACC-005)."
+  },
+  {
+    "question": "¿Qué chaquetas tienen disponibles para el invierno?",
+    "ground_truth": "Para invierno hay disponibles: Chaqueta de Cuero Negra (OUT-001), Abrigo de Paño Camel (OUT-002), Parka Impermeable Verde (OUT-003) y Puffer Jacket Blanca (OUT-006)."
+  },
+  {
+    "question": "¿Cuánto cuesta el vestido de cóctel negro y de qué material es?",
+    "ground_truth": "El Vestido de Cóctel Negro (DRS-002) cuesta $39.990 CLP y está hecho de crepé."
+  },
+  {
+    "question": "¿Tienen zapatillas urbanas blancas en talla 42?",
+    "ground_truth": "Sí, las Zapatillas Urbanas Blancas (SHO-001) tienen 6 unidades disponibles en talla 42."
+  },
+  {
+    "question": "Quiero un outfit deportivo completo para entrenar",
+    "ground_truth": "Se puede combinar el Top Deportivo Negro (TOP-006), el Legging Deportivo Negro (BOT-012) y las Zapatillas Running Negras (SHO-005)."
+  },
+  {
+    "question": "¿Qué productos tienen para ir a la playa?",
+    "ground_truth": "Para la playa hay disponibles: Camisa de Lino Beige (TOP-005), Camisa Estampada Hawaiana (TOP-012), Shorts de Jean Claro (BOT-005), Bermuda Chino Azul Marino (BOT-008), Vestido Blanco de Playa (DRS-007), Sandalias Planas de Playa (SHO-007) y Gafas de Sol Redondas (ACC-003)."
+  },
+  {
+    "question": "¿Tienen algún pantalón de tela gris para hombre en talla 42?",
+    "ground_truth": "Sí, el Pantalón de Tela Gris Sastre (BOT-003) es para hombre y tiene 7 unidades disponibles en talla 42."
+  },
+  {
+    "question": "¿Cuál es el producto más caro del catálogo?",
+    "ground_truth": "El producto más caro del catálogo es el Abrigo de Paño Camel (OUT-002), a $59.990 CLP."
+  },
+  {
+    "question": "¿Tienen bototos o botas de vestir de mujer en color rojo?",
+    "ground_truth": "No, la tienda no tiene botas ni bototos de mujer en color rojo en el catálogo actual."
+  }
+]

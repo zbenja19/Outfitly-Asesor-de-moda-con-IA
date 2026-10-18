@@ -1,0 +1,14 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.16, pytest-9.1.1, pluggy-1.7.0
+rootdir: /tmp/claude-0/-home-claude/15ba0d10-479b-58f9-ae49-a636a57f0194/scratchpad/repo/Outfitly
+configfile: pytest.ini
+testpaths: tests
+plugins: anyio-4.15.1, langsmith-0.12.1
+collected 25 items
+
+tests/test_agent_scenarios.py ........                                   [ 32%]
+tests/test_memory.py ........                                            [ 64%]
+tests/test_stores_and_tools.py ........                                  [ 96%]
+tests/test_ui_smoke.py .                                                 [100%]
+
+============================== 25 passed in 1.22s ==============================
