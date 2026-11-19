@@ -7,6 +7,7 @@ Fachada del agente: lo unico que necesitan conocer Streamlit y los scripts.
 """
 
 import os
+import time
 import uuid
 from dataclasses import dataclass, field
 
@@ -23,6 +24,8 @@ from src.agent.graph import (
 )
 from src.agent.stores import CatalogStore, ConversationStore, MemoryStore, WorkflowStore
 from src.agent.tools import build_tools
+from src.observability.logger import RunRecorder, write_event
+from src.security.guards import MAX_INPUT_CHARS, RateLimiter, detect_injection, mask_pii, pseudonymize
 
 load_dotenv()
 
@@ -46,6 +49,13 @@ class AgentReply:
     degraded: bool = False
     total_tokens: int = 0
     model: str | None = None
+    # EP3: observabilidad
+    run_id: str = ""
+    latency_ms: float = 0.0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    spans: list[dict] = field(default_factory=list)
+    blocked: bool = False
 
 
 def make_chat_model(model: str | None = None, temperature: float = 0.2):
@@ -95,6 +105,8 @@ class OutfitlyAgent:
         self.max_replans = max_replans
         self.model_name = getattr(llm, "model_name", None) or getattr(llm, "model", None)
         self._graphs: dict[str | None, object] = {}
+        self.recorder = RunRecorder()          # EP3: spans del turno en curso
+        self.rate_limiter = RateLimiter(limit=20, window_s=60)
 
     # ------------------------------------------------------------------ #
     @classmethod
@@ -139,14 +151,75 @@ class OutfitlyAgent:
         # Las herramientas se ligan al hilo (para registrar en que conversacion se reservo).
         if thread_id not in self._graphs:
             tools = build_tools(self.catalog, self.memory, self.workflow, self.user_id, thread_id)
+            for tool in tools:  # EP3: medir cada herramienta
+                tool.func = self.recorder.wrap(tool.func, tool.name, "tool")
             self._graphs[thread_id] = build_graph(
-                self.llm, tools, self.memory, self.history_window, self.max_replans
+                self.llm, tools, self.memory, self.history_window, self.max_replans, recorder=self.recorder
             )
         return self._graphs[thread_id]
 
     # ------------------------------------------------------------------ #
     @traceable(name="outfitly-agent")
     def chat(self, text: str, thread_id: str) -> AgentReply:
+        """Punto de entrada: seguridad -> turno -> log estructurado (EP3)."""
+        run_id = uuid.uuid4().hex[:12]
+        base = {
+            "event": "run", "run_id": run_id, "thread_id": thread_id,
+            "user": pseudonymize(self.user_id), "model": self.model_name,
+            "input": mask_pii(text)[:200], "input_chars": len(text),
+        }
+        if len(text) > MAX_INPUT_CHARS:
+            write_event({**base, "status": "blocked", "security_flags": ["input_too_long"]})
+            raise AgentError(f"El mensaje supera los {MAX_INPUT_CHARS} caracteres. Acórtalo.")
+        if not self.rate_limiter.allow(self.user_id):
+            write_event({**base, "status": "blocked", "security_flags": ["rate_limited"]})
+            raise AgentError("Demasiados mensajes en poco tiempo. Espera un minuto e inténtalo de nuevo.")
+        if detect_injection(text):
+            write_event({**base, "status": "blocked", "security_flags": ["prompt_injection"]})
+            return AgentReply(
+                answer="No puedo ayudar con esa solicitud. Soy un asesor de moda: cuéntame qué ocasión, "
+                       "talla y presupuesto tienes y te armo un outfit con productos en stock.",
+                run_id=run_id, blocked=True, model=self.model_name,
+            )
+
+        self.recorder.reset()
+        start = time.perf_counter()
+        try:
+            reply = self._run_turn(text, thread_id)
+        except AgentError as exc:
+            cause = exc.__cause__
+            write_event({
+                **base, "status": "error", "latency_ms": round((time.perf_counter() - start) * 1000, 1),
+                "error_type": type(cause).__name__ if cause else "AgentError", "error": mask_pii(str(exc))[:300],
+                "node_ms": self.recorder.node_ms(),
+            })
+            raise
+        reply.latency_ms = round((time.perf_counter() - start) * 1000, 1)
+        reply.run_id = run_id
+        reply.spans = list(self.recorder.spans)
+        tool_ms, tool_errors = self.recorder.tool_summary()
+        write_event({
+            **base,
+            "status": "degraded" if reply.degraded else "ok",
+            "latency_ms": reply.latency_ms,
+            "node_ms": self.recorder.node_ms(),
+            "tool_ms": tool_ms,
+            "tool_errors": tool_errors,
+            "n_llm_calls": sum(1 for s in reply.spans if s["kind"] == "node" and s["name"] in ("plan", "agent")),
+            "n_tool_calls": len(reply.tool_calls),
+            "tools": [c["name"] for c in reply.tool_calls],
+            "prompt_tokens": reply.prompt_tokens,
+            "completion_tokens": reply.completion_tokens,
+            "total_tokens": reply.total_tokens,
+            "replans": reply.replans,
+            "degraded": reply.degraded,
+            "verification_ok": bool((reply.verification or {}).get("ok")),
+            "verification_issues": [mask_pii(i)[:160] for i in (reply.verification or {}).get("issues", [])],
+            "intent": (reply.plan or {}).get("intent"),
+        })
+        return reply
+
+    def _run_turn(self, text: str, thread_id: str) -> AgentReply:
         history = self.conversations.load(thread_id)
         messages = history + [HumanMessage(content=text)]
 
@@ -175,8 +248,10 @@ class OutfitlyAgent:
                         "name": call["name"], "args": call["args"],
                         "result": str(result.content)[:600] if result else None,
                     })
-        tokens = sum((getattr(m, "usage_metadata", None) or {}).get("total_tokens", 0)
-                     for m in turn if isinstance(m, AIMessage))
+        usages = [getattr(m, "usage_metadata", None) or {} for m in turn if isinstance(m, AIMessage)]
+        tokens = sum(u.get("total_tokens", 0) for u in usages)
+        prompt_tokens = sum(u.get("input_tokens", 0) for u in usages)
+        completion_tokens = sum(u.get("output_tokens", 0) for u in usages)
 
         return AgentReply(
             answer=str(answer_msg.content) if answer_msg else "",
@@ -187,6 +262,8 @@ class OutfitlyAgent:
             replans=state.get("replans", 0),
             degraded=bool(state.get("degraded")),
             total_tokens=tokens,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
             model=self.model_name,
         )
 

@@ -83,3 +83,11 @@ def pytest_sessionfinish(session, exitstatus):
     path = Path(out)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(_render(_records, summary), encoding="utf-8")
+
+
+
+
+@pytest.fixture(autouse=True)
+def _logs_de_observabilidad_en_tmp(tmp_path, monkeypatch):
+    """EP3: las pruebas nunca ensucian logs/runs.jsonl."""
+    monkeypatch.setenv("OBS_LOG_PATH", str(tmp_path / "runs.jsonl"))

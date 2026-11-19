@@ -297,9 +297,15 @@ filters = {
 # --------------------------------------------------------------------------- #
 # Tabs
 # --------------------------------------------------------------------------- #
-tab_agent, tab_chat, tab_catalog, tab_eval = st.tabs(
-    ["🤖 Agente (EP2)", "💬 Chat RAG (EP1)", "🗂️ Catálogo", "📊 Evaluación (RAGAS)"]
+tab_agent, tab_obs, tab_chat, tab_catalog, tab_eval = st.tabs(
+    ["🤖 Agente (EP2)", "📈 Observabilidad (EP3)", "💬 Chat RAG (EP1)", "🗂️ Catálogo", "📊 Evaluación (RAGAS)"]
 )
+
+# --- Observability tab (EP3) ---
+with tab_obs:
+    from src.observability.dashboard import render_observability_tab
+
+    render_observability_tab(st)
 
 # --- Agent tab (EP2) ---
 with tab_agent:

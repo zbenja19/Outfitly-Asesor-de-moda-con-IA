@@ -33,6 +33,7 @@ from langgraph.prebuilt import ToolNode
 from prompts.agent_prompt import AGENT_SYSTEM_PROMPT, FEEDBACK_TEMPLATE, PLANNER_SYSTEM_PROMPT
 from src.agent.planner import Plan, heuristic_plan, normalize_plan, plan_to_text
 from src.agent.stores import MemoryStore
+from src.security.guards import mask_pii
 
 SKU_PATTERN = re.compile(r"\b[A-Z]{3}-\d{3}\b")
 # Afirmaciones en pasado de haber reservado ("he reservado", "reservé", "quedó reservada").
@@ -136,6 +137,7 @@ def build_graph(
     memory: MemoryStore,
     history_window: int = DEFAULT_HISTORY_WINDOW,
     max_replans: int = DEFAULT_MAX_REPLANS,
+    recorder=None,
 ):
     llm_with_tools = llm.bind_tools(tools)
     planner_llm = llm.with_structured_output(Plan)
@@ -333,7 +335,7 @@ def build_graph(
 
         def store(text: str, kind: str) -> None:
             try:
-                result = memory.add(user_id, text, kind=kind)
+                result = memory.add(user_id, mask_pii(text), kind=kind)  # EP3: sin PII en memoria
                 if result.get("saved"):
                     saved.append(text)
             except Exception as exc:  # noqa: BLE001
@@ -365,13 +367,17 @@ def build_graph(
         detail = f"{len(saved)} recuerdo(s) guardado(s)" + (f", {len(errors)} error(es)" if errors else "")
         return {"trace": [_trace("remember", detail, saved=saved, errors=errors)]}
 
+    # EP3: cada nodo se mide con el RunRecorder (latencia y errores por nodo).
+    def timed(fn, name):
+        return recorder.wrap(fn, name, "node") if recorder else fn
+
     graph = StateGraph(AgentState)
-    graph.add_node("recall", recall)
-    graph.add_node("plan", plan)
-    graph.add_node("agent", agent)
+    graph.add_node("recall", timed(recall, "recall"))
+    graph.add_node("plan", timed(plan, "plan"))
+    graph.add_node("agent", timed(agent, "agent"))
     graph.add_node("tools", tool_node)
-    graph.add_node("verify", verify)
-    graph.add_node("remember", remember)
+    graph.add_node("verify", timed(verify, "verify"))
+    graph.add_node("remember", timed(remember, "remember"))
 
     graph.add_edge(START, "recall")
     graph.add_edge("recall", "plan")
